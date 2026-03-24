@@ -1,4 +1,4 @@
-# EMC2FMA Project Miraj`i API Gateway
+# EMC2FMA Project Mira-j`-i : API Gateway
 
 A Spring WebFlux-based API Gateway providing JWT authentication, dynamic route proxying, CORS enforcement, rate limiting, circuit breaking, and pluggable user management — configurable entirely through environment variables or `application.yml`.
 
@@ -43,7 +43,7 @@ Enable Hibernate and configure the datasource:
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/mydb
+    url: jdbc:mysql://<db-host>:3306/<mydb>
     username: root
     password: secret
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -60,7 +60,7 @@ java -Dhibernate.enabled=true -jar api-gateway.jar
 ```
 
 ```bash
-docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 -e VM_ARGS="-Dhibernate.enabled=true"
+docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 --env-file .env -e VM_ARGS="-Dhibernate.enabled=true"
 ```
 
 A default admin account is seeded on first startup:
@@ -83,7 +83,7 @@ Disable Hibernate and point the gateway at your User microservice:
 java -Dhibernate.enabled=false -jar output/api-gateway-0.0.1-spring-boot.jar
 ```
 ```bash
-docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 -e VM_ARGS="-Dhibernate.enabled=false"
+docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 --env-file .env -e VM_ARGS="-Dhibernate.enabled=false"
 ```
 
 ```yaml
@@ -128,14 +128,14 @@ security:
 
 ## 3. JWT Authentication
 
-The gateway validates JWTs on every non-whitelisted request. Signing keys can be sourced from four locations, selected by `security.jwt.public.type` and `security.jwt.private.type` (must be the same value).
+The gateway validates JWTs on every non-whitelisted request. Signing keys can be sourced , by setting env variables, `security.jwt.public.type` and `security.jwt.private.type` (must be the same value).
 
 | Type | Description |
 |------|-------------|
 | `STRING` | Inline HMAC secret in config |
 | `X509_JKS_FILE` | RSA key pair from local filesystem (JKS / CER) |
 
-For `X509_JKS_FILE` type the storage types
+For `X509_JKS_FILE` the storage types is selected by env variables, `security.jwt.public.store` and `security.jwt.private.store`:
 
 | `FILE` | RSA keys fetched from local file disk |
 | `AWS` | RSA keys fetched from Amazon S3 |
@@ -323,7 +323,7 @@ spring:
   main:
     web-application-type: reactive
   datasource:
-    url: jdbc:mysql://localhost:3306/gatewaydb
+    url: jdbc:mysql://mysql-db-server:3306/gatewaydb
     username: root
     password: secret
   jpa:
@@ -357,7 +357,7 @@ security:
 
 routes:
   apis:
-    </product/**>:  <http://localhost:4001/product>
+    </product/**>:  <http://product-service:4001/product>
 
 springdoc:
   swagger-ui:
@@ -374,7 +374,7 @@ Start:
 java -Dhibernate.enabled=true -jar api-gateway.jar
 ```
 ```bash
-docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 -e VM_ARGS="-Dhibernate.enabled=true"
+docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 --env-file .env -e VM_ARGS="-Dhibernate.enabled=true"
 ```
 
 ---
