@@ -61,7 +61,7 @@ java -Dhibernate.enabled=true -jar api-gateway.jar
 ```
 
 ```bash
-docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 --env-file .env -e VM_ARGS="-Dhibernate.enabled=true"
+docker run  -p 8080:8080 --env-file .env -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" --name emc2fma/emc2fma.com-api-gateway
 ```
 
 A default admin account is seeded on first startup:
@@ -84,7 +84,7 @@ Disable Hibernate and point the gateway at your User microservice:
 java -Dhibernate.enabled=false -jar output/api-gateway-0.0.1-spring-boot.jar
 ```
 ```bash
-docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 --env-file .env -e VM_ARGS="-Dhibernate.enabled=false"
+docker run  -p 8080:8080 --env-file .env -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=false" --name emc2fma/emc2fma.com-api-gateway
 ```
 
 ```yaml
@@ -375,7 +375,7 @@ Start:
 java -Dhibernate.enabled=true -jar api-gateway.jar
 ```
 ```bash
-docker run --name emc2fma/emc2fma.com-api-gateway -p 8080:8080 --env-file .env -e VM_ARGS="-Dhibernate.enabled=true"
+docker run  -p 8080:8080 --env-file .env -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" --name emc2fma/emc2fma.com-api-gateway
 ```
 
 ---
