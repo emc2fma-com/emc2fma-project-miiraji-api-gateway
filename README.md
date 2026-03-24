@@ -1,9 +1,7 @@
 # EMC2FMA Project Mira-j`-i : API Gateway
 
-A Spring WebFlux-based API Gateway providing JWT authentication, dynamic route proxying, CORS enforcement, rate limiting, circuit breaking, and pluggable user management — 
-
-configurable entirely through environment variables or `application.yml`.
-The envirinment variables found in env-file, [.env]https://github.com/emc2fma-com/emc2fma-project-miiraji-api-gateway/blob/main/.env-file.
+A Spring WebFlux-based API Gateway providing JWT authentication, dynamic route proxying, CORS enforcement, rate limiting, circuit breaking, and pluggable user management — configurable entirely through environment variables or `application.yml`.
+The envorinment variables are available in env-file, [.env](https://github.com/emc2fma-com/emc2fma-project-miiraji-api-gateway/blob/main/.env-file).
 
 ---
 
