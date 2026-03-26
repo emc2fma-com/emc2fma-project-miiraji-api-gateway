@@ -1,7 +1,8 @@
-# EMC2FMA Project Mira-j`-i : API Gateway
+# EMC2FMA Project Miiraji : API Gateway
 
 A Spring WebFlux-based API Gateway providing JWT authentication, dynamic route proxying, CORS enforcement, rate limiting, circuit breaking, and pluggable user management — configurable entirely through environment variables or `application.yml`.
-The environment variables are available in env-file, [.env](https://github.com/emc2fma-com/emc2fma-project-miiraji-api-gateway/blob/main/.env-file) or [application.properties](https://github.com/emc2fma-com/emc2fma-project-miiraji-api-gateway/blob/main/application.properties)
+
+Environment variables are available in [.env](https://github.com/emc2fma-com/emc2fma-project-miiraji-api-gateway/blob/main/.env-file) or [application.properties](https://github.com/emc2fma-com/emc2fma-project-miiraji-api-gateway/blob/main/application.properties).
 
 ---
 
@@ -13,9 +14,11 @@ The environment variables are available in env-file, [.env](https://github.com/e
 4. [JWT Authentication](#3-jwt-authentication)
 5. [Rate Limiter](#4-rate-limiter)
 6. [Circuit Breaker](#5-circuit-breaker)
-7. [Logging](#6-logging)
-8. [Actuator / Management](#7-actuator--management)
-9. [Quick-Start Configuration](#quick-start-configuration)
+7. [CORS](#6-cors)
+8. [Logging](#7-logging)
+9. [Actuator / Management](#8-actuator--management)
+10. [API Reference](#9-api-reference)
+11. [Quick-Start Configuration](#quick-start-configuration)
 
 ---
 
@@ -28,8 +31,9 @@ The environment variables are available in env-file, [.env](https://github.com/e
 | 3 | JWT Auth — STRING / filesystem / AWS S3 / Azure Blob keys | Configurable |
 | 4 | Redis-based sliding-window rate limiter | Optional |
 | 5 | Resilience4j circuit breaker | Optional |
-| 6 | Structured logging with MDC (userId, correlationId) | Always on |
-| 7 | Spring Boot Actuator health & management endpoints | Always on |
+| 6 | CORS enforcement | Configurable |
+| 7 | Structured logging with MDC (userId, correlationId) | Always on |
+| 8 | Spring Boot Actuator health & management endpoints | Always on |
 
 ---
 
@@ -57,11 +61,13 @@ spring:
 Pass the JVM flag at startup:
 
 ```bash
-java -Dhibernate.enabled=true -jar api-gateway.jar
+java -Dhibernate.enabled=true -jar api-gateway-0.0.1-spring-boot.jar
 ```
 
 ```bash
-docker run  -p 8080:8080 --env-file .env -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" --name emc2fma/emc2fma.com-api-gateway
+docker run -p 8080:8080 --env-file .env \
+  -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" \
+  emc2fma/emc2fma.com-api-gateway:<version>
 ```
 
 A default admin account is seeded on first startup:
@@ -69,12 +75,12 @@ A default admin account is seeded on first startup:
 | Property | Default | Notes |
 |----------|---------|-------|
 | `user.default.userName` | `admin` | Change immediately |
-| `user.default.pwd` | `admin123` | Change immediately |
+| `user.default.pwd` | `${USER_DEFAULT_PWD:admin123}` | **Override via env var before go-live** |
 | `user.default.roleName` | `admin` | |
 | `user.default.startDate` | `2026-01-19` | `yyyy-MM-dd` |
 | `user.default.endDate` | `2028-01-19` | `yyyy-MM-dd` |
 
-> **Production:** change `user.default.pwd` before go-live and set `ddl-auto: validate`.
+> **Production:** set the `USER_DEFAULT_PWD` environment variable before go-live and set `ddl-auto: validate`.
 
 ### External User API
 
@@ -83,18 +89,21 @@ Disable Hibernate and point the gateway at your User microservice:
 ```bash
 java -Dhibernate.enabled=false -jar output/api-gateway-0.0.1-spring-boot.jar
 ```
+
 ```bash
-docker run  -p 8080:8080 --env-file .env -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=false" --name emc2fma/emc2fma.com-api-gateway
+docker run -p 8080:8080 --env-file .env \
+  -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=false" \
+  emc2fma/emc2fma.com-api-gateway:<version>
 ```
 
 ```yaml
 user:
   service:
     api:
-      url: <http://user-service:4001/user>
+      url: <http://user-service:4001/user>      # required
       path:
         name: </by-name>        # optional — path segment for name lookups
-        id:   </by-id >           # optional — path segment for id lookups
+        id:   </by-id>          # optional — path segment for id lookups
       query:   ""               # optional default query string
       headers: ""               # optional forwarded headers (key=value)
 ```
@@ -108,36 +117,60 @@ The gateway acts as a reverse proxy. Routes are declared as a map where **each k
 ```yaml
 routes:
   apis:
-    /order/**:   http://order-service:8081
+    /order/**:      http://order-service:8081
     /inventory/**: http://inventory-service:8082
-    /payment/**:  http://payment-service:8083
 ```
 
 All requests matching `/order/**` are forwarded to `http://order-service:8081`, preserving the path suffix.
 
 ### JWT whitelist (unauthenticated paths)
 
-Paths that should bypass JWT verification (e.g. docs, public health):
+Paths that bypass JWT verification (e.g. login, docs, public health):
 
 ```yaml
 security:
   white:
-    paths: /sample/v1/docs/**, /actuator/health, /public/**
+    paths: /login, /actuator/health, /v3/api-docs/**, /swagger-ui/**
 ```
 
 ---
 
 ## 3. JWT Authentication
 
-The gateway validates JWTs on every non-whitelisted request. Signing keys can be sourced , by setting env variables, `security.jwt.public.type` and `security.jwt.private.type` (must be the same value).
+### Token issuance
+
+Send credentials to the login endpoint — no JWT is required for this call:
+
+```
+POST /login
+Content-Type: application/json
+
+{
+  "userName": "admin",
+  "passWord": "admin123",
+  "organizationId": "optional-org-id"
+}
+```
+
+A successful response returns a signed JWT. Pass it on all subsequent protected requests:
+
+```
+Authorization: Bearer <token>
+```
+
+### Token validation
+
+The gateway validates the JWT on every non-whitelisted request. Signing keys are sourced by setting `security.jwt.public.type` and `security.jwt.private.type` (must be the same value).
 
 | Type | Description |
 |------|-------------|
 | `STRING` | Inline HMAC secret in config |
-| `X509_JKS_FILE` | RSA key pair from local filesystem (JKS / CER) |
+| `X509_JKS_FILE` | RSA key pair (JKS / CER) |
 
-For `X509_JKS_FILE` the storage types is selected by env variables, `security.jwt.public.store` and `security.jwt.private.store`:
+For `X509_JKS_FILE`, the storage location is selected by `security.jwt.public.store` and `security.jwt.private.store`:
 
+| Store | Description |
+|-------|-------------|
 | `FILE` | RSA keys fetched from local file disk |
 | `AWS` | RSA keys fetched from Amazon S3 |
 | `AZURE` | RSA keys fetched from Azure Blob Storage |
@@ -149,20 +182,30 @@ Token expiry is controlled by `security.jwt.token.expiration` (default: **10 min
 ```yaml
 security:
   jwt:
-    public:  { type: STRING }
-    private: { type: STRING }
+    token:
+      expiration: 10    # minutes
+    public:
+      type: STRING
+    private:
+      type: STRING
     string:
       public.Key:  your-public-hmac-secret
       private.Key: your-private-hmac-secret
 ```
 
-### FS (filesystem RSA)
+### Filesystem RSA
 
 ```yaml
 security:
   jwt:
-    public:  { type: FS }
-    private: { type: FS }
+    token:
+      expiration: 10    # minutes
+    public:
+      type: X509_JKS_FILE
+      store: FILE
+    private:
+      type: X509_JKS_FILE
+      store: FILE
     fs:
       public.path:  /keys/public.cer
       private.path: /keys/private.jks
@@ -178,20 +221,26 @@ security:
 ```yaml
 security:
   jwt:
-    public:  { type: AWS }
-    private: { type: AWS }
+    token:
+      expiration: 10    # minutes
+    public:
+      type: X509_JKS_FILE
+      store: AWS
+    private:
+      type: X509_JKS_FILE
+      store: AWS
     aws:
       public:
         region: <aws-region>
-        access: <aws-access>
-        secret: <aws-secret>
-        bucket: <bucket>
+        access: <aws-access-key>
+        secret: <aws-secret-key>
+        bucket: <bucket-name>
         path:   <path-to-public-cer>
       private:
         region: <aws-region>
-        access: <aws-access>
-        secret: <aws-secret>
-        bucket: <bucket>
+        access: <aws-access-key>
+        secret: <aws-secret-key>
+        bucket: <bucket-name>
         path:   <path-to-private-jks>
 ```
 
@@ -200,16 +249,22 @@ security:
 ```yaml
 security:
   jwt:
-    public:  { type: AZURE }
-    private: { type: AZURE }
+    token:
+      expiration: 10    # minutes
+    public:
+      type: X509_JKS_FILE
+      store: AZURE
+    private:
+      type: X509_JKS_FILE
+      store: AZURE
     azure:
       public:
-        connectionString: <"DefaultEndpointsProtocol=https;AccountName=...">
-        containerName: <container>
+        connectionString: <DefaultEndpointsProtocol=https;AccountName=...>
+        containerName: <container-name>
         blobName: <certificate-file>
       private:
-        connectionString: <"DefaultEndpointsProtocol=https;AccountName=...">
-        containerName: <container>
+        connectionString: <DefaultEndpointsProtocol=https;AccountName=...>
+        containerName: <container-name>
         blobName: <jks-file>
 ```
 
@@ -217,7 +272,7 @@ security:
 
 ## 4. Rate Limiter
 
-Sliding-window rate limiting backed by **Redis**.
+Sliding-window rate limiting backed by **Redis**. When the limit is exceeded the gateway returns `429 Too Many Requests`. No `Retry-After` header is sent by default.
 
 ```yaml
 security:
@@ -228,10 +283,10 @@ security:
     header.key:    X-Client-Id  # header used to identify the caller
     redis:
       host:    <redis-host>
-      port:    <redis-port - default 6379>
+      port:    <redis-port>     # default: 6379
       dbindex: 1
-      uname:   <redisuser>
-      pwd:     <redispassword>
+      uname:   <redis-username>
+      pwd:     <redis-password>
 ```
 
 > Set `enabled: false` to remove the Redis startup dependency entirely.
@@ -241,6 +296,8 @@ security:
 ## 5. Circuit Breaker
 
 Resilience4j circuit breaker wraps all upstream proxy calls. Disabled by default.
+
+The breaker **opens** when the failure rate exceeds `failureRateThreshold`% across the last `slidingWindowSize` calls (at least `minimumNumberOfCalls` must have been made). While open, all calls are blocked immediately. After `waitDurationInOpenState` ms it transitions to **HALF_OPEN**, allows `permittedNumberOfCallsInHalfOpenState` probe calls, then returns to **CLOSED** on success or back to **OPEN** on failure.
 
 ```yaml
 spring:
@@ -253,12 +310,12 @@ resilience4j:
   circuitbreaker:
     instances:
       default:
-        minimumNumberOfCalls:                        5
-        failureRateThreshold:                        50      # %
-        slidingWindowType:                           COUNT_BASED
-        slidingWindowSize:                           10
-        waitDurationInOpenState:                     10000   # ms
-        permittedNumberOfCallsInHalfOpenState:       3
+        minimumNumberOfCalls:                         5
+        failureRateThreshold:                         50      # %
+        slidingWindowType:                            COUNT_BASED
+        slidingWindowSize:                            10
+        waitDurationInOpenState:                      10000   # ms
+        permittedNumberOfCallsInHalfOpenState:        3
         automaticTransitionFromOpenToHalfOpenEnabled: true
 ```
 
@@ -266,7 +323,27 @@ States: **CLOSED** (normal) → **OPEN** (failing, blocks calls) → **HALF_OPEN
 
 ---
 
-## 6. Logging
+## 6. CORS
+
+Cross-origin request handling is configurable per environment. For production, replace wildcards with explicit values.
+
+```yaml
+security:
+  cors:
+    enable: true
+    allowed:
+      origins: "https://app.example.com"   # use "*" for local dev only
+      methods: "GET, POST, PUT, DELETE, OPTIONS"
+      headers: "Authorization, Content-Type, X-Client-Id"
+    creds:  false    # set true only if cookies/auth headers are needed cross-origin
+    maxAge: 3600     # seconds to cache preflight response
+```
+
+> **Production:** never combine `origins: "*"` with `creds: true` — browsers will reject the combination.
+
+---
+
+## 7. Logging
 
 Log levels follow Logback conventions. Every request is decorated with **MDC context** (`userId`, `correlationId`) automatically.
 
@@ -279,16 +356,18 @@ logging:
   pattern:
     console: "%d{HH:mm:ss} [%X{correlationId}] [%X{userId}] %-5level %logger{36} - %msg%n"
   file:
-    path: </var/log/api-gateway>   # omit to disable file logging
+    path: /var/log/api-gateway   # omit this key entirely to disable file logging
 ```
 
 Available levels: `TRACE` / `DEBUG` / `INFO` / `WARN` / `ERROR`
 
+> **Note:** The `{...}` tokens in the console pattern (e.g. `%d{HH:mm:ss}`, `%X{correlationId}`) are **Logback syntax**, not config placeholders — copy them verbatim.
+
 ---
 
-## 7. Actuator / Management
+## 8. Actuator / Management
 
-Spring Boot Actuator is enabled by default. Sensitive endpoints (`env`, `beans`) are excluded.
+Spring Boot Actuator is enabled by default. `env` and `beans` are excluded because they expose sensitive environment values and the full bean graph.
 
 ```yaml
 management:
@@ -310,6 +389,329 @@ Key endpoints:
 | `GET /actuator/info` | App metadata |
 | `GET /actuator/metrics` | Micrometer metrics |
 | `GET /actuator/loggers` | Runtime log-level inspection |
+
+The Swagger UI (`/swagger-ui/index.html`) and raw API docs (`/v3/api-docs`) are whitelisted by default and do not require a JWT.
+
+---
+
+## 9. API Reference
+
+All endpoints except `POST /login` require a valid JWT:
+
+```
+Authorization: Bearer <token>
+```
+
+Several write endpoints also accept an optional `X-User-Id` header, recorded as `createdBy` / `updatedBy` in the audit fields.
+
+### Response envelope
+
+Every response — success or failure — uses the same wrapper:
+
+```json
+{
+  "value": "<payload or null>",
+  "error": {
+    "message": "human-readable description",
+    "code": 400
+  }
+}
+```
+
+`error` is `null` on success; `value` is `null` on error.
+
+---
+
+### Auth
+
+#### `POST /login` — Authenticate and obtain a JWT
+
+> No `Authorization` header required.
+
+**Request body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `userName` | string | yes | Account username |
+| `passWord` | string | yes | Account password |
+| `organizationId` | string | no | Optional tenant / org identifier |
+
+```json
+{
+  "userName": "admin",
+  "passWord": "admin123",
+  "organizationId": "my-org"
+}
+```
+
+**Response `200 OK`**
+
+```json
+{ "value": true, "error": null }
+```
+
+The signed JWT is returned in the `Authorization` response header. Use it as `Authorization: Bearer <token>` on all subsequent calls.
+
+---
+
+### Users
+
+#### `POST /user` — Create a user
+
+**Headers:** `X-User-Id` (optional, recorded as `createdBy`)
+
+**Request body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `userName` | string | yes | Unique login name |
+| `password` | string | yes | Plain-text password (hashed server-side) |
+| `firstName` | string | no | Given name |
+| `lastName` | string | no | Family name |
+| `dob` | date-time | no | Date of birth — ISO 8601 e.g. `1990-06-15T00:00:00Z` |
+| `startDate` | date-time | no | Account activation date |
+| `expiredDate` | date-time | no | Account expiry date |
+| `userRoles` | string[] | no | Role names to assign (roles must already exist) |
+
+```json
+{
+  "userName": "alice",
+  "password": "s3cr3t",
+  "firstName": "Alice",
+  "lastName": "Smith",
+  "dob": "1990-06-15T00:00:00Z",
+  "startDate": "2026-01-01T00:00:00Z",
+  "expiredDate": "2028-01-01T00:00:00Z",
+  "userRoles": ["admin", "viewer"]
+}
+```
+
+**Response `200 OK`** — returns the new user's integer ID.
+
+```json
+{ "value": 42, "error": null }
+```
+
+---
+
+#### `PUT /user/{id}` — Update a user
+
+**Path params:** `id` (integer)
+
+**Headers:** `X-User-Id` (optional, recorded as `updatedBy`)
+
+**Request body** — same fields as `POST /user`. Include only the fields you want to change.
+
+**Response `200 OK`**
+
+```json
+{ "value": true, "error": null }
+```
+
+---
+
+#### `GET /user/id/{id}` — Get user by ID
+
+**Path params:** `id` (integer)
+
+**Response `200 OK`**
+
+```json
+{
+  "value": {
+    "id": 42,
+    "userName": "alice",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "password": "<hashed>",
+    "dob": "1990-06-15T00:00:00Z",
+    "startDate": "2026-01-01T00:00:00Z",
+    "expiredDate": "2028-01-01T00:00:00Z",
+    "userRoles": ["admin"],
+    "createdAt": "2026-01-01T10:00:00Z",
+    "createdBy": "admin",
+    "updatedAt": "2026-03-01T09:00:00Z",
+    "updatedBy": "admin"
+  },
+  "error": null
+}
+```
+
+---
+
+#### `GET /user/name/{uname}` — Get user by username
+
+**Path params:** `uname` (string)
+
+**Response `200 OK`** — same shape as `GET /user/id/{id}`.
+
+---
+
+#### `POST /user/all` — List users (paginated)
+
+**Query params:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `page` | integer | yes | Zero-based page number |
+| `pageSize` | integer | yes | Results per page |
+
+**Request body**
+
+```json
+{
+  "sort": {
+    "userName": "asc",
+    "createdAt": "desc"
+  }
+}
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "value": [
+    {
+      "id": 42,
+      "userName": "alice",
+      "startDate": "2026-01-01T00:00:00Z",
+      "expiredDate": "2028-01-01T00:00:00Z",
+      "userRoles": ["admin"]
+    }
+  ],
+  "error": null
+}
+```
+
+---
+
+### Roles
+
+#### `POST /role` — Create a role
+
+**Headers:** `X-User-Id` (optional, recorded as `createdBy`)
+
+**Request body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `roleName` | string | yes | Unique role name |
+
+```json
+{ "roleName": "viewer" }
+```
+
+**Response `200 OK`** — returns the new role's integer ID.
+
+```json
+{ "value": 7, "error": null }
+```
+
+---
+
+#### `PUT /role/{id}` — Update a role
+
+**Path params:** `id` (integer)
+
+**Headers:** `X-User-Id` (optional, recorded as `updatedBy`)
+
+**Request body**
+
+```json
+{ "id": 7, "roleName": "editor" }
+```
+
+**Response `200 OK`**
+
+```json
+{ "value": true, "error": null }
+```
+
+---
+
+#### `GET /role/id/{id}` — Get role by ID
+
+**Path params:** `id` (integer)
+
+**Response `200 OK`**
+
+```json
+{
+  "value": {
+    "id": 7,
+    "roleName": "viewer",
+    "createdAt": "2026-01-01T10:00:00Z",
+    "createdBy": "admin",
+    "updatedAt": "2026-01-01T10:00:00Z",
+    "updatedBy": "admin"
+  },
+  "error": null
+}
+```
+
+---
+
+#### `GET /role/name/{uname}` — Get role by name
+
+**Path params:** `uname` (string)
+
+**Response `200 OK`** — same shape as `GET /role/id/{id}`.
+
+---
+
+#### `POST /role/all` — List roles (paginated)
+
+**Query params:** `page` (integer, required), `pageSize` (integer, required)
+
+**Request body**
+
+```json
+{
+  "sort": { "roleName": "asc" }
+}
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "value": [
+    {
+      "id": 7,
+      "roleName": "viewer",
+      "createdAt": "2026-01-01T10:00:00Z",
+      "createdBy": "admin",
+      "updatedAt": "2026-01-01T10:00:00Z",
+      "updatedBy": "admin"
+    }
+  ],
+  "error": null
+}
+```
+
+---
+
+### HTTP status codes
+
+| Status | Meaning |
+|--------|---------|
+| `200` | Success |
+| `400` | Bad request — validation failed or missing required fields |
+| `401` | Unauthorized — missing or invalid JWT |
+| `403` | Forbidden — authenticated but insufficient role |
+| `404` | Not found — user or role ID does not exist |
+| `429` | Too many requests — rate limit exceeded |
+| `500` | Internal server error — check actuator logs |
+
+Error body:
+
+```json
+{
+  "value": null,
+  "error": { "message": "User not found", "code": 404 }
+}
+```
 
 ---
 
@@ -336,7 +738,7 @@ server:
 
 security:
   white:
-    paths: /actuator/health, /v3/api-docs/**, /swagger-ui/**
+    paths: /login, /actuator/health, /v3/api-docs/**, /swagger-ui/**
   cors:
     enable: true
     allowed:
@@ -347,7 +749,7 @@ security:
     maxAge: 5
   jwt:
     token:
-      expiration: 10
+      expiration: 10    # minutes
     public:
       type: STRING
     private:
@@ -358,11 +760,11 @@ security:
 
 routes:
   apis:
-    </product/**>:  <http://product-service:4001/product>
+    /product/**: http://product-service:4001/product
 
 springdoc:
   swagger-ui:
-    path: /swagger-ui.html
+    path: /swagger-ui/index.html
     enabled: true
   api-docs:
     path: /v3/api-docs
@@ -372,10 +774,13 @@ springdoc:
 Start:
 
 ```bash
-java -Dhibernate.enabled=true -jar api-gateway.jar
+java -Dhibernate.enabled=true -jar api-gateway-0.0.1-spring-boot.jar
 ```
+
 ```bash
-docker run  -p 8080:8080 --env-file .env -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" --name emc2fma/emc2fma.com-api-gateway
+docker run -p 8080:8080 --env-file .env \
+  -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" \
+  emc2fma/emc2fma.com-api-gateway:<version>
 ```
 
 ---
