@@ -65,7 +65,7 @@ java -Dhibernate.enabled=true -jar api-gateway-0.0.1-spring-boot.jar
 ```
 
 ```bash
-docker run -p 8080:8080 --env-file .env \
+docker run -p 8080:8080 -v <local-folder>:/app/files --env-file .env \
   -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" \
   emc2fma/emc2fma.com-api-gateway:<version>
 ```
@@ -91,7 +91,7 @@ java -Dhibernate.enabled=false -jar output/api-gateway-0.0.1-spring-boot.jar
 ```
 
 ```bash
-docker run -p 8080:8080 --env-file .env \
+docker run -p 8080:8080 -v <local-folder>:/app/files --env-file .env \
   -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=false" \
   emc2fma/emc2fma.com-api-gateway:<version>
 ```
@@ -194,7 +194,7 @@ security:
 ```
 
 ### Filesystem RSA
-
+#### ⚠️ "docker run -v" should point container app to local folder containing path to keys.
 ```yaml
 security:
   jwt:
@@ -362,6 +362,8 @@ logging:
 Available levels: `TRACE` / `DEBUG` / `INFO` / `WARN` / `ERROR`
 
 > **Note:** The `{...}` tokens in the console pattern (e.g. `%d{HH:mm:ss}`, `%X{correlationId}`) are **Logback syntax**, not config placeholders — copy them verbatim.
+
+## 7b. otel/otlp, prometheus and zipkin available for end-to-end tracing with metrics.
 
 ---
 
@@ -778,7 +780,7 @@ java -Dhibernate.enabled=true -jar api-gateway-0.0.1-spring-boot.jar
 ```
 
 ```bash
-docker run -p 8080:8080 --env-file .env \
+docker run -p 8080:8080 -v <local-folder>:/app/files --env-file .env \
   -e JDK_JAVA_OPTIONS="-Dhibernate.enabled=true" \
   emc2fma/emc2fma.com-api-gateway:<version>
 ```
